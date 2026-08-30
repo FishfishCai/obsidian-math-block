@@ -73,7 +73,7 @@ export async function renderBlock(
   await MarkdownRenderer.render(app, block.body, body, sourcePath, component);
 
   if (block.type === PROOF_TYPE) {
-    const tombstone = body.createSpan({ cls: "math-block-tombstone" });
+    const tombstone = blockElement.createSpan({ cls: "math-block-tombstone" });
     tombstone.setAttribute("aria-label", "End of proof");
     tombstone.textContent = "∎";
   }

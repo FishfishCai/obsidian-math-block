@@ -1,5 +1,5 @@
 .math-block {
-  margin: 1.15em 0;
+  margin: 0.4em 0;
   color: var(--text-normal);
   font-size: 1em;
   line-height: 1.55;
@@ -12,7 +12,8 @@
   font-weight: var(--math-block-title-weight);
 }
 
-.math-block-body {
+.math-block-body,
+.math-block-tombstone {
   font-family: var(--math-block-body-family);
   font-style: var(--math-block-body-style);
   font-weight: var(--math-block-body-weight);
@@ -32,9 +33,13 @@
   margin-bottom: 0;
 }
 
+.math-block-proof > .math-block-body {
+  margin-inline: 2em;
+}
+
 .math-block-tombstone {
-  float: right;
-  margin-left: 0.75em;
+  display: block;
+  text-align: right;
 }
 
 .math-block-editor-widget {
@@ -42,12 +47,12 @@
   cursor: text;
 }
 
-.math-block-hover-popover .markdown-preview-section:not(.math-block-hover-target) {
-  display: none;
+.math-block-editor-widget > .math-block {
+  margin: 0;
 }
 
-.math-block-hover-popover .math-block {
-  margin: 0.4em 0;
+.math-block-hover-popover .markdown-preview-section:not(.math-block-hover-target) {
+  display: none;
 }
 
 .math-block-settings-table {
