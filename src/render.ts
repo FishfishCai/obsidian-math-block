@@ -44,7 +44,7 @@ export async function renderBlock(
   definition: BlockDefinition,
 ): Promise<void> {
   const blockElement = container.createDiv({
-    cls: `math-block math-block-${block.type}`,
+    cls: `math-block-container math-block-${block.type}`,
   });
   applyTypography(blockElement, "title", definition.title);
   applyTypography(blockElement, "body", definition.body);

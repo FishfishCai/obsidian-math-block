@@ -11,6 +11,7 @@ content.
 ```
 
 Write the title after the colon and the block ID on the closing line.
+Leave a blank line between blocks so Obsidian can index the block ID.
 
 ## References
 
