@@ -72,6 +72,26 @@ describe("blockAwareLineRange", () => {
       fullyCovered: false,
     });
   });
+
+  it("keeps the text that follows a continued block's closing line", () => {
+    const tail = parseBlocks([
+      "::: theorem",
+      "$$",
+      "x",
+      "$$",
+      ":::",
+      "after",
+    ].join("\n"));
+    expect(blockAwareLineRange(4, 5, tail)).toEqual({
+      lineStart: 5,
+      lineEnd: 5,
+      fullyCovered: false,
+    });
+  });
+
+  it("returns null for a section of ordinary Markdown", () => {
+    expect(blockAwareLineRange(3, 3, blocks)).toBeNull();
+  });
 });
 
 describe("previewBlockForSection", () => {
@@ -99,7 +119,7 @@ describe("previewBlockForSection", () => {
     expect(previewBlockForSection("", 6, 6, blocks)?.type).toBe("note");
   });
 
-  it("does not turn a full-file preview into a single block preview", () => {
+  it("keeps a full-file preview whole", () => {
     expect(previewBlockForSection(markdown, 0, 6, blocks)).toBeNull();
   });
 });

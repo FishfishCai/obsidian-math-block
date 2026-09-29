@@ -41,7 +41,7 @@ describe("parseBlocks", () => {
     expect(blocks.map((block) => block.id)).toEqual([null, null, null]);
   });
 
-  it("ignores block-looking text inside fenced code", () => {
+  it("treats block syntax inside fenced code as code", () => {
     const markdown = [
       "```markdown",
       "::: theorem:Not a block",
@@ -58,7 +58,7 @@ describe("parseBlocks", () => {
     expect(blocks[0]?.label).toBe("Actual");
   });
 
-  it("does not close a block on colons inside its code fence", () => {
+  it("keeps colons inside a code fence within the block", () => {
     const markdown = [
       "::: example:Code",
       "```",
@@ -163,7 +163,7 @@ describe("parseBlocks", () => {
     expect(block.body).toBe("body");
   });
 
-  it("does not accept characters outside Obsidian's block ID syntax", () => {
+  it("requires a closing ID in Obsidian's block ID syntax", () => {
     expect(parseBlocks([
       "::: theorem:Invalid ID",
       "body",

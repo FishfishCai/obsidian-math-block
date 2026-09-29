@@ -34,11 +34,12 @@ export function markdownForLineRange(
   return markdown.split("\n").slice(lineStart, lineEnd + 1).join("\n");
 }
 
+// A null range marks a section of ordinary Markdown.
 export function blockAwareLineRange(
   lineStart: number,
   lineEnd: number,
   blocks: readonly ParsedBlock[],
-): BlockAwareLineRange {
+): BlockAwareLineRange | null {
   const continuedBlocks = blocks.filter(
     (block) => block.fromLine < lineStart && block.toLine >= lineStart,
   );
@@ -55,16 +56,19 @@ export function blockAwareLineRange(
     };
   }
 
-  const effectiveEnd = blocks
-    .filter(
-      (block) =>
-        block.fromLine >= effectiveStart && block.fromLine <= lineEnd,
-    )
-    .reduce((end, block) => Math.max(end, block.toLine), lineEnd);
+  const startedBlocks = blocks.filter(
+    (block) => block.fromLine >= effectiveStart && block.fromLine <= lineEnd,
+  );
+  if (continuedBlocks.length === 0 && startedBlocks.length === 0) {
+    return null;
+  }
 
   return {
     lineStart: effectiveStart,
-    lineEnd: effectiveEnd,
+    lineEnd: startedBlocks.reduce(
+      (end, block) => Math.max(end, block.toLine),
+      lineEnd,
+    ),
     fullyCovered: false,
   };
 }

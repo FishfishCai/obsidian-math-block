@@ -61,7 +61,7 @@ function prepareReference(
         candidate.body === selected.body,
   );
   if (!block) {
-    throw new Error("Target block is no longer available.");
+    throw new Error("Target block was removed or changed.");
   }
   return {
     block,

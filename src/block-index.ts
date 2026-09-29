@@ -28,12 +28,8 @@ export class BlockIndex {
     private readonly getDefinitions: () => readonly BlockDefinition[],
   ) {}
 
+  // Modified files miss the cache by mtime; these events drop dead paths.
   register(plugin: Plugin): void {
-    plugin.registerEvent(
-      this.app.vault.on("modify", (file) => {
-        this.cache.delete(file.path);
-      }),
-    );
     plugin.registerEvent(
       this.app.vault.on("delete", (file) => {
         if (file instanceof TFile) {

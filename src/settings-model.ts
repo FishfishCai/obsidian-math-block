@@ -132,13 +132,6 @@ export function normalizeSettings(value: unknown): MathBlockSettings {
   };
 }
 
-export function definitionForType(
-  definitions: readonly BlockDefinition[],
-  type: string,
-): BlockDefinition | null {
-  return definitions.find((definition) => definition.type === type) ?? null;
-}
-
 export function uniqueCustomType(
   definitions: readonly BlockDefinition[],
 ): string {

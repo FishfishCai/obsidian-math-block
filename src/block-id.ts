@@ -18,8 +18,7 @@ function labelStem(block: ParsedBlock): string | null {
 
 export function collectBlockIds(markdown: string): Set<string> {
   return new Set(
-    Array.from(markdown.matchAll(blockIdPattern), (match) => match[1])
-      .filter((id): id is string => id !== undefined),
+    Array.from(markdown.matchAll(blockIdPattern), (match) => match[1]!),
   );
 }
 

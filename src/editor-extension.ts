@@ -19,10 +19,7 @@ import {
 
 import { parseBlocks, type ParsedBlock } from "./parser";
 import { renderBlock } from "./render";
-import {
-  definitionForType,
-  type BlockDefinition,
-} from "./settings-model";
+import type { BlockDefinition } from "./settings-model";
 
 function caretAtPoint(
   element: HTMLElement,
@@ -31,11 +28,7 @@ function caretAtPoint(
 ): CaretPosition | null {
   const document = element.ownerDocument;
   const caret = document.caretPositionFromPoint(x, y);
-  if (!caret || !element.contains(caret.offsetNode)) {
-    return null;
-  }
-
-  return caret;
+  return caret && element.contains(caret.offsetNode) ? caret : null;
 }
 
 function textRatioAtCaret(
@@ -106,20 +99,19 @@ function sourceOffsetForTextNode(
   offset: number,
   expected: number,
 ): number | null {
-  if (node.nodeType !== Node.TEXT_NODE || node.nodeValue === null) {
+  if (!node.instanceOf(Text)) {
     return null;
   }
 
-  const nodeText = node.nodeValue;
-  const textOffset = Math.min(Math.max(offset, 0), nodeText.length);
-  const exact = nearestOccurrence(source, nodeText, textOffset, expected);
+  const nodeText = node.data;
+  const exact = nearestOccurrence(source, nodeText, offset, expected);
   if (exact !== null) {
     return exact;
   }
 
   const normalizedSource = normalizedText(source);
   const normalizedNode = normalizedText(nodeText);
-  const normalizedOffset = normalizedText(nodeText.slice(0, textOffset)).text.length;
+  const normalizedOffset = normalizedText(nodeText.slice(0, offset)).text.length;
   const normalizedMatch = nearestOccurrence(
     normalizedSource.text,
     normalizedNode.text,
@@ -130,21 +122,16 @@ function sourceOffsetForTextNode(
     return null;
   }
 
-  return normalizedMatch >= normalizedSource.offsets.length
-    ? source.length
-    : (normalizedSource.offsets[normalizedMatch] ?? null);
+  return normalizedSource.offsets[normalizedMatch] ?? source.length;
 }
 
-function sourcePositionAtPoint(
+function sourceOffsetAtPoint(
   block: ParsedBlock,
   container: HTMLElement,
   event: MouseEvent,
 ): number {
-  const openingLine = block.raw.split("\n", 1)[0] ?? "";
-  const bodyStart = Math.min(
-    block.from + openingLine.length + 1,
-    block.to,
-  );
+  const openingLength = block.raw.indexOf("\n");
+  const bodyStart = openingLength + 1;
   const target = event.targetNode;
   const section = target?.instanceOf(Element)
     ? target.closest<HTMLElement>(".math-block-title, .math-block-body")
@@ -154,8 +141,8 @@ function sourcePositionAtPoint(
   }
 
   const title = section.classList.contains("math-block-title");
-  const source = title ? openingLine : block.body;
-  const start = title ? block.from : bodyStart;
+  const source = title ? block.raw.slice(0, openingLength) : block.body;
+  const start = title ? 0 : bodyStart;
   const caret = caretAtPoint(section, event.clientX, event.clientY);
   if (!caret) {
     return start;
@@ -180,18 +167,18 @@ class BlockWidget extends WidgetType {
   constructor(
     private readonly plugin: Plugin,
     private readonly block: ParsedBlock,
-    private readonly definition: BlockDefinition,
     private readonly sourcePath: string,
   ) {
     super();
-    this.definitionKey = JSON.stringify(definition);
+    // Settings edit definitions in place, so compare a snapshot.
+    this.definitionKey = JSON.stringify(block.definition);
   }
 
+  // Position is left out: a widget moved by edits above it keeps its DOM.
   eq(other: BlockWidget): boolean {
     return (
       other.block.raw === this.block.raw &&
       other.block.number === this.block.number &&
-      other.block.from === this.block.from &&
       other.sourcePath === this.sourcePath &&
       other.definitionKey === this.definitionKey
     );
@@ -212,7 +199,6 @@ class BlockWidget extends WidgetType {
       container,
       this.sourcePath,
       renderChild,
-      this.definition,
     );
 
     container.addEventListener("mousedown", (event) => {
@@ -222,7 +208,8 @@ class BlockWidget extends WidgetType {
       }
 
       event.preventDefault();
-      const anchor = sourcePositionAtPoint(this.block, container, event);
+      const anchor = view.posAtDOM(container) +
+        sourceOffsetAtPoint(this.block, container, event);
       view.dispatch({
         selection: { anchor },
         scrollIntoView: true,
@@ -255,26 +242,20 @@ function buildDecorations(
   plugin: Plugin,
   state: EditorState,
   blocks: readonly ParsedBlock[],
-  definitions: readonly BlockDefinition[],
 ): DecorationSet {
   if (!state.field(editorLivePreviewField)) {
     return Decoration.none;
   }
 
   const sourcePath = state.field(editorInfoField).file?.path ?? "";
-  const hiddenBlocks = blocks
-    .filter((block) => !selectionTouchesRange(state, block))
-    .flatMap((block) => {
-      const definition = definitionForType(definitions, block.type);
-      return definition
-        ? [Decoration.replace({
-          block: true,
-          widget: new BlockWidget(plugin, block, definition, sourcePath),
-        }).range(block.from, block.to)]
-        : [];
-    });
-
-  return Decoration.set(hiddenBlocks);
+  return Decoration.set(
+    blocks
+      .filter((block) => !selectionTouchesRange(state, block))
+      .map((block) => Decoration.replace({
+        block: true,
+        widget: new BlockWidget(plugin, block, sourcePath),
+      }).range(block.from, block.to)),
+  );
 }
 
 export function createBlockEditorExtension(
@@ -292,7 +273,7 @@ export function createBlockEditorExtension(
       return {
         definitions,
         blocks,
-        decorations: buildDecorations(plugin, state, blocks, definitions),
+        decorations: buildDecorations(plugin, state, blocks),
       };
     },
     update(value, transaction) {
@@ -303,7 +284,7 @@ export function createBlockEditorExtension(
       return {
         definitions,
         blocks,
-        decorations: buildDecorations(plugin, transaction.state, blocks, definitions),
+        decorations: buildDecorations(plugin, transaction.state, blocks),
       };
     },
     provide(field) {

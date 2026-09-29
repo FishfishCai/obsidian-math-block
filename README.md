@@ -15,7 +15,7 @@ Leave a blank line between blocks so Obsidian can index the block ID.
 
 ## References
 
-Type `\ref` to search Math Block entries. Selecting a result inserts a native `[[#^block-id|name]]` link. If the target has no block ID, the plugin adds a unique ID to its closing line.
+Type `\ref` to search Math Block entries. Selecting a result inserts a native `[[#^block-id|name]]` link. When the target needs a block ID, the plugin adds a unique one to its closing line.
 
 - Current file: [[#^definition-a|Definition 1 (A)]]
 - Hover preview: hover in Reading view; hold `Cmd` on macOS or `Ctrl` on Windows/Linux while hovering in Live Preview
@@ -29,7 +29,7 @@ Navigation, embeds, backlinks, file-rename updates, and modifier-key behavior ar
 
 Each row defines a block name, its title and body typography, and whether it uses the shared counter. Font-family fields accept CSS `font-family` values directly; the default is `"Times New Roman", serif`. Use the **B** and **I** controls for bold and italic.
 
-Proof is fixed, cannot be deleted, and is never numbered. Other rows can be edited, removed, or added.
+Proof is a fixed, unnumbered row. Every other row can be edited, removed, or added.
 
 | Name | Title | Body | Numbered |
 | --- | --- | --- | --- |

@@ -5,6 +5,7 @@ import {
 
 export interface ParsedBlock {
   type: string;
+  definition: BlockDefinition;
   label: string | null;
   id: string | null;
   number: number | null;
@@ -49,6 +50,7 @@ export function parseBlocks(
     const codeFence = line.match(fencePattern);
     const marker = codeFence?.[1];
     const info = codeFence?.[2] ?? "";
+    const inlineCode = marker?.[0] === "`" && info.includes("`");
 
     if (fence) {
       if (
@@ -59,7 +61,7 @@ export function parseBlocks(
       }
       continue;
     }
-    if (marker && (marker[0] !== "`" || !info.includes("`"))) {
+    if (marker && !inlineCode) {
       fence = marker;
       continue;
     }
@@ -73,6 +75,7 @@ export function parseBlocks(
       const to = from + line.length;
       blocks.push({
         type: open.definition.type,
+        definition: open.definition,
         label: open.label,
         id: closing[1] ?? null,
         number,

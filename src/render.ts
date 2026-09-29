@@ -6,11 +6,7 @@ import {
 
 import type { ParsedBlock } from "./parser";
 import { displayNameForType } from "./block-name";
-import {
-  PROOF_TYPE,
-  type BlockDefinition,
-  type Typography,
-} from "./settings-model";
+import { PROOF_TYPE, type Typography } from "./settings-model";
 
 function applyTypography(
   element: HTMLElement,
@@ -41,13 +37,12 @@ export async function renderBlock(
   container: HTMLElement,
   sourcePath: string,
   component: Component,
-  definition: BlockDefinition,
 ): Promise<void> {
   const blockElement = container.createDiv({
     cls: `math-block-container math-block-${block.type}`,
   });
-  applyTypography(blockElement, "title", definition.title);
-  applyTypography(blockElement, "body", definition.body);
+  applyTypography(blockElement, "title", block.definition.title);
+  applyTypography(blockElement, "body", block.definition.body);
   const title = blockElement.createDiv({ cls: "math-block-title" });
 
   title.appendText(displayNameForType(block.type));
@@ -55,26 +50,30 @@ export async function renderBlock(
     title.appendText(` ${block.number}`);
   }
 
+  const renders: Promise<void>[] = [];
   if (block.label) {
     title.appendText(" (");
     const renderedLabel = title.createSpan({ cls: "math-block-label" });
-    await MarkdownRenderer.render(
+    renders.push(MarkdownRenderer.render(
       app,
       block.label,
       renderedLabel,
       sourcePath,
       component,
-    );
+    ));
     title.appendText(")");
   }
   title.appendText(".");
 
   const body = blockElement.createDiv({ cls: "math-block-body" });
-  await MarkdownRenderer.render(app, block.body, body, sourcePath, component);
+  renders.push(
+    MarkdownRenderer.render(app, block.body, body, sourcePath, component),
+  );
 
   if (block.type === PROOF_TYPE) {
     const tombstone = blockElement.createSpan({ cls: "math-block-tombstone" });
     tombstone.setAttribute("aria-label", "End of proof");
     tombstone.textContent = "∎";
   }
+  await Promise.all(renders);
 }

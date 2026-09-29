@@ -203,7 +203,7 @@ describe("reference insertion", () => {
     expect(source.api.getValue()).toBe("[[B#^b|Theorem 1 (B)]]");
   });
 
-  it("leaves the target file untouched when it already has an ID", async () => {
+  it("links an existing cross-file ID by reading the target only", async () => {
     const markdown = "::: theorem:B\nabc\n::: ^b";
     const { source, vault, suggest } = setup("\\ref", markdown);
     suggest.selectSuggestion({ file: file("B.md"), block: parseBlocks(markdown)[0]! }, {} as KeyboardEvent);
@@ -296,6 +296,34 @@ describe("Live Preview state", () => {
     expect(before.eq(after)).toBe(true);
     after.destroy(dom);
     expect(plugin.removeChild).toHaveBeenCalledWith(plugin.addChild.mock.calls[0]![0]);
+  });
+
+  it("keeps a widget's DOM when edits above move the block", () => {
+    const { state } = setup();
+    const before = widgets(state)[0]!;
+    const after = widgets(state.update({ changes: { from: 0, insert: "x" } }).state)[0]!;
+    expect(before.eq(after)).toBe(true);
+  });
+
+  it("places the cursor from the widget's current position", () => {
+    const plugin = { addChild: vi.fn(), removeChild: vi.fn() };
+    const { state } = setup(plugin as unknown as Plugin);
+    const container = { addEventListener: vi.fn() };
+    const view = {
+      dom: { win: { createDiv: () => container } },
+      posAtDOM: () => 7,
+      dispatch: vi.fn(),
+      focus: vi.fn(),
+    };
+    const widget = widgets(state)[0]!;
+    const dom = widget.toDOM(view as unknown as EditorView);
+    const listener = container.addEventListener.mock.calls[0]![1] as (event: MouseEvent) => void;
+    listener({ button: 0, targetNode: null, preventDefault: vi.fn() } as unknown as MouseEvent);
+    expect(view.dispatch).toHaveBeenCalledWith({
+      selection: { anchor: 7 + "::: theorem:B\n".length },
+      scrollIntoView: true,
+    });
+    widget.destroy(dom);
   });
 
   it("leaves secondary mouse clicks to the native context menu", () => {

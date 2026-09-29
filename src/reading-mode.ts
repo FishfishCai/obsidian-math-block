@@ -12,12 +12,9 @@ import {
   markdownForLineRange,
   previewBlockForSection,
 } from "./markdown-section";
-import { parseBlocks } from "./parser";
+import { parseBlocks, type ParsedBlock } from "./parser";
 import { renderBlock } from "./render";
-import {
-  definitionForType,
-  type BlockDefinition,
-} from "./settings-model";
+import type { BlockDefinition } from "./settings-model";
 
 async function renderPlainMarkdown(
   plugin: Plugin,
@@ -66,7 +63,6 @@ export async function processReadingModeBlocks(
     return;
   }
   const source = await index.getDocument(file);
-  const definitions = getDefinitions();
   const hoverPopover = element.closest<HTMLElement>(".hover-popover");
   const exactPreview = hoverPopover !== null ||
     element.closest(".internal-embed") !== null;
@@ -78,10 +74,6 @@ export async function processReadingModeBlocks(
       source.blocks,
     );
     if (targetBlock) {
-      const definition = definitionForType(definitions, targetBlock.type);
-      if (!definition) {
-        return;
-      }
       element.textContent = "";
       element.classList.add("math-block-reading-section");
       if (hoverPopover) {
@@ -102,24 +94,23 @@ export async function processReadingModeBlocks(
         blockContainer,
         context.sourcePath,
         renderChild,
-        definition,
       );
       return;
     }
   }
 
-  const scopedBlocks = parseBlocks(section.text, definitions);
-  const usesRelativeSection = (
-    scopedBlocks.length > 0 &&
-    section.text.trim() !== source.markdown.trim()
-  );
+  // Parse section.text only when it is a fragment of the note.
+  const definitions = getDefinitions();
+  const fragmentBlocks = section.text.trim() === source.markdown.trim()
+    ? []
+    : parseBlocks(section.text, definitions);
 
   let sectionMarkdown: string;
-  let localBlocks: ReturnType<typeof parseBlocks>;
+  let localBlocks: ParsedBlock[];
   let sectionLineStart: number;
-  if (usesRelativeSection) {
+  if (fragmentBlocks.length > 0) {
     sectionMarkdown = section.text;
-    localBlocks = scopedBlocks;
+    localBlocks = fragmentBlocks;
     sectionLineStart = section.lineStart;
   } else {
     const range = blockAwareLineRange(
@@ -127,6 +118,9 @@ export async function processReadingModeBlocks(
       section.lineEnd,
       source.blocks,
     );
+    if (!range) {
+      return;
+    }
     if (range.fullyCovered) {
       element.textContent = "";
       element.classList.add("math-block-reading-section");
@@ -141,18 +135,6 @@ export async function processReadingModeBlocks(
     localBlocks = parseBlocks(sectionMarkdown, definitions);
     sectionLineStart = range.lineStart;
   }
-  if (localBlocks.length === 0) {
-    return;
-  }
-
-  const globalByLine = new Map(
-    source.blocks.map((block) => [block.fromLine, block]),
-  );
-  const globalById = new Map(
-    source.blocks
-      .filter((block) => block.id !== null)
-      .map((block) => [block.id, block]),
-  );
 
   element.textContent = "";
   element.classList.add("math-block-reading-section");
@@ -171,27 +153,19 @@ export async function processReadingModeBlocks(
 
     const absoluteLine = sectionLineStart + localBlock.fromLine;
     const globalBlock = (
-      localBlock.id ? globalById.get(localBlock.id) : undefined
-    ) ?? globalByLine.get(absoluteLine);
-    const block = globalBlock
-      ? { ...localBlock, number: globalBlock.number, fromLine: absoluteLine }
-      : { ...localBlock, fromLine: absoluteLine };
-
-    const definition = definitionForType(definitions, block.type);
-    if (!definition) {
-      cursor = localBlock.to;
-      continue;
-    }
+      localBlock.id
+        ? source.blocks.find((block) => block.id === localBlock.id)
+        : undefined
+    ) ?? source.blocks.find((block) => block.fromLine === absoluteLine);
     const blockContainer = element.createDiv({
       cls: "math-block-generated",
     });
     await renderBlock(
       plugin.app,
-      block,
+      globalBlock ? { ...localBlock, number: globalBlock.number } : localBlock,
       blockContainer,
       context.sourcePath,
       renderChild,
-      definition,
     );
     cursor = localBlock.to;
   }
