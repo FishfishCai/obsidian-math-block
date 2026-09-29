@@ -5,3 +5,5 @@ data.json
 .obsidian/
 *.log
 .DS_Store
+.claude/*
+!.claude/skills/
