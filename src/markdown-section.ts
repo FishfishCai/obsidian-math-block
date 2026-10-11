@@ -26,6 +26,27 @@ interface BlockAwareLineRange {
   fullyCovered: boolean;
 }
 
+// Section embeds render a slice of the saved note, and their lines count from it.
+export function savedLineOffset(text: string, markdown: string): number | null {
+  const fragment = text.trimEnd();
+  const index = markdown.indexOf(fragment);
+  if (index < 0) {
+    return null;
+  }
+  if (markdown.indexOf(fragment, index + 1) >= 0) {
+    throw new Error("The rendered text matches more than one place in the note.");
+  }
+  return markdown.slice(0, index).split("\n").length - 1;
+}
+
+export function offsetOfLine(markdown: string, line: number): number {
+  let offset = 0;
+  for (let index = 0; index < line; index += 1) {
+    offset = markdown.indexOf("\n", offset) + 1;
+  }
+  return offset;
+}
+
 export function markdownForLineRange(
   markdown: string,
   lineStart: number,

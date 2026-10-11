@@ -22,6 +22,7 @@ interface CacheEntry {
 
 export class BlockIndex {
   private readonly cache = new Map<string, CacheEntry>();
+  private lastText: IndexedDocument | null = null;
 
   constructor(
     private readonly app: App,
@@ -74,7 +75,19 @@ export class BlockIndex {
     return document;
   }
 
+  // Reading views render many sections from the same unsaved text.
+  parseText(markdown: string): ParsedBlock[] {
+    if (this.lastText?.markdown !== markdown) {
+      this.lastText = {
+        markdown,
+        blocks: parseBlocks(markdown, this.getDefinitions()),
+      };
+    }
+    return this.lastText.blocks;
+  }
+
   clear(): void {
     this.cache.clear();
+    this.lastText = null;
   }
 }

@@ -5,7 +5,7 @@ import { createBlockEditorExtension } from "./editor-extension";
 import { processReadingModeBlocks } from "./reading-mode";
 import { ReferenceSuggest } from "./reference-suggest";
 import {
-  normalizeSettings,
+  parseSettings,
   type MathBlockSettings,
 } from "./settings-model";
 import { MathBlockSettingTab } from "./settings-tab";
@@ -15,7 +15,7 @@ export default class MathBlockPlugin extends Plugin {
   private index!: BlockIndex;
 
   async onload(): Promise<void> {
-    this.config = normalizeSettings(await this.loadData());
+    this.config = parseSettings(await this.loadData());
     this.index = new BlockIndex(this.app, () => this.config.blocks);
     this.index.register(this);
 
@@ -29,7 +29,6 @@ export default class MathBlockPlugin extends Plugin {
       processReadingModeBlocks(
         this,
         this.index,
-        () => this.config.blocks,
         element,
         context,
       ),

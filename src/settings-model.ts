@@ -27,8 +27,11 @@ export interface MathBlockSettings {
   blocks: BlockDefinition[];
 }
 
-export const PROOF_TYPE = "proof";
-export const DEFAULT_FONT_FAMILY = '"Times New Roman", serif';
+export const DEFAULT_FONT_FAMILY = "Times New Roman";
+
+export function quoteFontFamily(family: string): string {
+  return `"${family.replace(/["\\]/gu, "\\$&")}"`;
+}
 
 const defaultTypography = (style: FontStyle): Typography => ({
   family: DEFAULT_FONT_FAMILY,
@@ -49,16 +52,13 @@ function definition(
   };
 }
 
-const PROOF_DEFINITION = definition(PROOF_TYPE, "italic", "roman", false);
-
 export const DEFAULT_BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
-  PROOF_DEFINITION,
   definition("definition", "bold", "roman", true),
   definition("theorem", "bold", "italic", true),
   definition("proposition", "bold", "italic", true),
   definition("lemma", "bold", "italic", true),
   definition("corollary", "bold", "italic", true),
-  definition("example", "bold", "roman", true),
+  definition("example", "bold", "roman", false),
   definition("note", "bold", "roman", false),
 ];
 
@@ -68,68 +68,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function typography(value: unknown, defaults: Typography): Typography {
-  if (!isRecord(value)) {
-    return { ...defaults };
+function parseTypography(value: unknown, path: string): Typography {
+  if (
+    !isRecord(value) ||
+    typeof value.family !== "string" ||
+    !value.family.trim() ||
+    !isFontStyle(value.style)
+  ) {
+    throw new Error(`${path} needs a font family and a font style.`);
   }
-  const family = value.family;
-  const style = value.style;
+  return { family: value.family.trim(), style: value.style };
+}
+
+function parseBlock(value: unknown, index: number): BlockDefinition {
+  const path = `blocks[${index}]`;
+  if (
+    !isRecord(value) ||
+    typeof value.type !== "string" ||
+    !BLOCK_TYPE_PATTERN.test(value.type) ||
+    typeof value.numbered !== "boolean"
+  ) {
+    throw new Error(`${path} needs a valid name and a numbered flag.`);
+  }
   return {
-    family: typeof family === "string" && family.trim()
-      ? family.trim()
-      : defaults.family,
-    style: isFontStyle(style)
-      ? style
-      : defaults.style,
+    type: value.type,
+    title: parseTypography(value.title, `${path}.title`),
+    body: parseTypography(value.body, `${path}.body`),
+    numbered: value.numbered,
   };
 }
 
-function normalizedBlocks(value: unknown): BlockDefinition[] {
-  if (!Array.isArray(value)) {
-    return DEFAULT_BLOCK_DEFINITIONS.map((block) => structuredClone(block));
+// Obsidian loads null until the plugin first saves its settings.
+export function parseSettings(value: unknown): MathBlockSettings {
+  if (value === null) {
+    return {
+      blocks: DEFAULT_BLOCK_DEFINITIONS.map((block) => structuredClone(block)),
+    };
   }
-
-  const blocks: BlockDefinition[] = [];
-  const usedTypes = new Set<string>();
-  for (const candidate of value) {
-    if (!isRecord(candidate) || typeof candidate.type !== "string") {
-      continue;
-    }
-    const type = candidate.type.trim().toLowerCase();
-    if (!BLOCK_TYPE_PATTERN.test(type) || usedTypes.has(type)) {
-      continue;
-    }
-    const defaultDefinition = DEFAULT_BLOCK_DEFINITIONS.find(
-      (block) => block.type === type,
-    );
-    blocks.push({
-      type,
-      title: typography(
-        candidate.title,
-        defaultDefinition?.title ?? defaultTypography("bold"),
-      ),
-      body: typography(
-        candidate.body,
-        defaultDefinition?.body ?? defaultTypography("roman"),
-      ),
-      numbered: type !== PROOF_TYPE && (
-        typeof candidate.numbered === "boolean"
-          ? candidate.numbered
-          : (defaultDefinition?.numbered ?? false)
-      ),
-    });
-    usedTypes.add(type);
+  if (!isRecord(value) || !Array.isArray(value.blocks)) {
+    throw new Error("Settings need a blocks list.");
   }
-  const proof = blocks.find((block) => block.type === PROOF_TYPE) ??
-    structuredClone(PROOF_DEFINITION);
-  return [proof, ...blocks.filter((block) => block.type !== PROOF_TYPE)];
-}
-
-export function normalizeSettings(value: unknown): MathBlockSettings {
-  const stored = isRecord(value) ? value : {};
-  return {
-    blocks: normalizedBlocks(stored.blocks),
-  };
+  const blocks = value.blocks.map(parseBlock);
+  const types = new Set(blocks.map((block) => block.type));
+  if (types.size !== blocks.length) {
+    throw new Error("Block names must be unique.");
+  }
+  return { blocks };
 }
 
 export function uniqueCustomType(

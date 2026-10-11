@@ -20,6 +20,10 @@ import * as parser from "../src/parser";
 import { ReferenceSuggest } from "../src/reference-suggest";
 import { DEFAULT_BLOCK_DEFINITIONS } from "../src/settings-model";
 
+function parse(markdown: string) {
+  return parseBlocks(markdown, DEFAULT_BLOCK_DEFINITIONS);
+}
+
 const editorContext = vi.hoisted(() => ({ path: "A.md", live: true }));
 
 vi.mock("obsidian", async () => {
@@ -130,6 +134,18 @@ describe("block index", () => {
     await expect(index.getDocument(target)).rejects.toThrow("read failed");
     expect((await index.getDocument(target)).markdown).toBe("new");
   });
+
+  it("parses unsaved text once until it changes or the index clears", () => {
+    const index = new BlockIndex({} as App, () => DEFAULT_BLOCK_DEFINITIONS);
+    const text = "::: theorem\nabc\n:::";
+    const first = index.parseText(text);
+    expect(first.map((block) => block.number)).toEqual([1]);
+    expect(index.parseText(text)).toBe(first);
+    expect(index.parseText(`${text}\n`)).not.toBe(first);
+    const current = index.parseText(text);
+    index.clear();
+    expect(index.parseText(text)).not.toBe(current);
+  });
 });
 
 describe("reference insertion", () => {
@@ -169,7 +185,7 @@ describe("reference insertion", () => {
   it("inserts the local ID and link as one editor transaction", async () => {
     const markdown = "\\ref\n\n::: theorem:A\nabc\n:::";
     const { current, source, vault, suggest } = setup(markdown);
-    suggest.selectSuggestion({ file: current, block: parseBlocks(markdown)[0]! }, {} as KeyboardEvent);
+    suggest.selectSuggestion({ file: current, block: parse(markdown)[0]! }, {} as KeyboardEvent);
     await vi.waitFor(() => expect(source.transaction).toHaveBeenCalledTimes(1));
     expect(vault.process).not.toHaveBeenCalled();
     expect(source.api.getValue()).toBe("[[#^a|Theorem 1 (A)]]\n\n::: theorem:A\nabc\n::: ^a");
@@ -178,7 +194,7 @@ describe("reference insertion", () => {
   it("rejects a reference to a target removed after completion", async () => {
     const old = "\\ref\n\n::: theorem:A\nabc\n::: ^a";
     const { current, source, suggest } = setup("\\ref");
-    suggest.selectSuggestion({ file: current, block: parseBlocks(old)[0]! }, {} as KeyboardEvent);
+    suggest.selectSuggestion({ file: current, block: parse(old)[0]! }, {} as KeyboardEvent);
     await vi.waitFor(() => expect(Notice).toHaveBeenCalled());
     expect(source.api.getValue()).toBe("\\ref");
   });
@@ -188,7 +204,7 @@ describe("reference insertion", () => {
     const { current, source, suggest } = setup(markdown);
     suggest.context!.start = { line: 4, ch: 0 };
     suggest.context!.end = { line: 4, ch: 4 };
-    suggest.selectSuggestion({ file: current, block: parseBlocks(markdown)[0]! }, {} as KeyboardEvent);
+    suggest.selectSuggestion({ file: current, block: parse(markdown)[0]! }, {} as KeyboardEvent);
     await vi.waitFor(() => expect(source.transaction).toHaveBeenCalledTimes(1));
     expect(source.api.getValue()).toBe("::: theorem:A\nabc\n::: ^a\n\n[[#^a|Theorem 1 (A)]]");
   });
@@ -196,7 +212,7 @@ describe("reference insertion", () => {
   it("uses an atomic vault update for a new cross-file ID", async () => {
     const markdown = "::: theorem:B\nabc\n:::";
     const { source, vault, suggest } = setup("\\ref", markdown);
-    suggest.selectSuggestion({ file: file("B.md"), block: parseBlocks(markdown)[0]! }, {} as KeyboardEvent);
+    suggest.selectSuggestion({ file: file("B.md"), block: parse(markdown)[0]! }, {} as KeyboardEvent);
     await vi.waitFor(() => expect(source.transaction).toHaveBeenCalledTimes(1));
     expect(vault.process).toHaveBeenCalledTimes(1);
     expect(await vault.cachedRead()).toBe("::: theorem:B\nabc\n::: ^b");
@@ -206,7 +222,7 @@ describe("reference insertion", () => {
   it("links an existing cross-file ID by reading the target only", async () => {
     const markdown = "::: theorem:B\nabc\n::: ^b";
     const { source, vault, suggest } = setup("\\ref", markdown);
-    suggest.selectSuggestion({ file: file("B.md"), block: parseBlocks(markdown)[0]! }, {} as KeyboardEvent);
+    suggest.selectSuggestion({ file: file("B.md"), block: parse(markdown)[0]! }, {} as KeyboardEvent);
     await vi.waitFor(() => expect(source.transaction).toHaveBeenCalledTimes(1));
     expect(vault.process).not.toHaveBeenCalled();
     expect(source.api.getValue()).toBe("[[B#^b|Theorem 1 (B)]]");
@@ -217,7 +233,7 @@ describe("reference insertion", () => {
     const pending = deferred<string>();
     const { source, vault, suggest } = setup("\\ref", markdown);
     vault.cachedRead.mockReturnValueOnce(pending.promise);
-    suggest.selectSuggestion({ file: file("B.md"), block: parseBlocks(markdown)[0]! }, {} as KeyboardEvent);
+    suggest.selectSuggestion({ file: file("B.md"), block: parse(markdown)[0]! }, {} as KeyboardEvent);
     source.api.replaceRange("abc", { line: 0, ch: 0 }, { line: 0, ch: 4 });
     pending.resolve(markdown);
     await vi.waitFor(() => expect(Notice).toHaveBeenCalled());
@@ -259,13 +275,13 @@ describe("Live Preview state", () => {
   }
 
   it("reuses parsed blocks during cursor movement", () => {
-    const parse = vi.spyOn(parser, "parseBlocks");
+    const parseSpy = vi.spyOn(parser, "parseBlocks");
     let { state } = setup();
-    expect(parse).toHaveBeenCalledTimes(1);
+    expect(parseSpy).toHaveBeenCalledTimes(1);
     state = state.update({ selection: { anchor: 1 } }).state;
-    expect(parse).toHaveBeenCalledTimes(1);
+    expect(parseSpy).toHaveBeenCalledTimes(1);
     state = state.update({ changes: { from: 0, insert: "x" } }).state;
-    expect(parse).toHaveBeenCalledTimes(2);
+    expect(parseSpy).toHaveBeenCalledTimes(2);
     expect(state.doc.toString().startsWith("x")).toBe(true);
   });
 

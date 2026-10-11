@@ -10,11 +10,11 @@ import type { BlockIndex } from "./block-index";
 import {
   blockAwareLineRange,
   markdownForLineRange,
+  offsetOfLine,
   previewBlockForSection,
+  savedLineOffset,
 } from "./markdown-section";
-import { parseBlocks, type ParsedBlock } from "./parser";
 import { renderBlock } from "./render";
-import type { BlockDefinition } from "./settings-model";
 
 async function renderPlainMarkdown(
   plugin: Plugin,
@@ -40,7 +40,6 @@ async function renderPlainMarkdown(
 export async function processReadingModeBlocks(
   plugin: Plugin,
   index: BlockIndex,
-  getDefinitions: () => readonly BlockDefinition[],
   element: HTMLElement,
   context: MarkdownPostProcessorContext,
 ): Promise<void> {
@@ -99,75 +98,70 @@ export async function processReadingModeBlocks(
     }
   }
 
-  // Parse section.text only when it is a fragment of the note.
-  const definitions = getDefinitions();
-  const fragmentBlocks = section.text.trim() === source.markdown.trim()
-    ? []
-    : parseBlocks(section.text, definitions);
-
-  let sectionMarkdown: string;
-  let localBlocks: ParsedBlock[];
-  let sectionLineStart: number;
-  if (fragmentBlocks.length > 0) {
-    sectionMarkdown = section.text;
-    localBlocks = fragmentBlocks;
-    sectionLineStart = section.lineStart;
-  } else {
-    const range = blockAwareLineRange(
-      section.lineStart,
-      section.lineEnd,
-      source.blocks,
-    );
-    if (!range) {
+  // Section embeds render a slice of the saved note. The note's own view and
+  // whole-note embeds render its full text, which may hold unsaved edits.
+  let markdown = source.markdown;
+  let blocks = source.blocks;
+  let lineOffset = 0;
+  if (section.text.trimEnd() !== source.markdown.trimEnd()) {
+    const textBlocks = index.parseText(section.text);
+    if (textBlocks.length === 0) {
       return;
     }
-    if (range.fullyCovered) {
-      element.textContent = "";
-      element.classList.add("math-block-reading-section");
-      return;
+    const savedOffset = savedLineOffset(section.text, source.markdown);
+    if (savedOffset === null) {
+      markdown = section.text;
+      blocks = textBlocks;
+    } else {
+      lineOffset = savedOffset;
     }
-
-    sectionMarkdown = markdownForLineRange(
-      source.markdown,
-      range.lineStart,
-      range.lineEnd,
-    );
-    localBlocks = parseBlocks(sectionMarkdown, definitions);
-    sectionLineStart = range.lineStart;
   }
-
+  const range = blockAwareLineRange(
+    section.lineStart + lineOffset,
+    section.lineEnd + lineOffset,
+    blocks,
+  );
+  if (!range) {
+    return;
+  }
   element.textContent = "";
   element.classList.add("math-block-reading-section");
+  if (range.fullyCovered) {
+    return;
+  }
+
+  const sectionFrom = offsetOfLine(markdown, range.lineStart);
+  const sectionMarkdown = markdownForLineRange(
+    markdown,
+    range.lineStart,
+    range.lineEnd,
+  );
   const renderChild = new MarkdownRenderChild(element);
   context.addChild(renderChild);
   let cursor = 0;
 
-  for (const localBlock of localBlocks) {
+  for (const block of blocks) {
+    if (block.fromLine < range.lineStart || block.fromLine > range.lineEnd) {
+      continue;
+    }
     await renderPlainMarkdown(
       plugin,
-      sectionMarkdown.slice(cursor, localBlock.from),
+      sectionMarkdown.slice(cursor, block.from - sectionFrom),
       element,
       context.sourcePath,
       renderChild,
     );
-
-    const absoluteLine = sectionLineStart + localBlock.fromLine;
-    const globalBlock = (
-      localBlock.id
-        ? source.blocks.find((block) => block.id === localBlock.id)
-        : undefined
-    ) ?? source.blocks.find((block) => block.fromLine === absoluteLine);
     const blockContainer = element.createDiv({
       cls: "math-block-generated",
     });
     await renderBlock(
       plugin.app,
-      globalBlock ? { ...localBlock, number: globalBlock.number } : localBlock,
+      block,
       blockContainer,
       context.sourcePath,
       renderChild,
     );
-    cursor = localBlock.to;
+    cursor = block.to - sectionFrom;
   }
 
   await renderPlainMarkdown(

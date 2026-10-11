@@ -1,7 +1,4 @@
-import {
-  DEFAULT_BLOCK_DEFINITIONS,
-  type BlockDefinition,
-} from "./settings-model";
+import type { BlockDefinition } from "./settings-model";
 
 export interface ParsedBlock {
   type: string;
@@ -31,7 +28,7 @@ interface OpenBlock {
 
 export function parseBlocks(
   markdown: string,
-  definitions: readonly BlockDefinition[] = DEFAULT_BLOCK_DEFINITIONS,
+  definitions: readonly BlockDefinition[],
 ): ParsedBlock[] {
   const lines = markdown.split("\n");
   const types = new Map(

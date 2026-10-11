@@ -7,9 +7,14 @@ import {
 } from "../src/block-id";
 import { blockBodyPreview, blockDisplayName } from "../src/block-name";
 import { parseBlocks } from "../src/parser";
+import { DEFAULT_BLOCK_DEFINITIONS } from "../src/settings-model";
+
+function parse(markdown: string) {
+  return parseBlocks(markdown, DEFAULT_BLOCK_DEFINITIONS);
+}
 
 function firstBlock(markdown: string) {
-  const block = parseBlocks(markdown)[0];
+  const block = parse(markdown)[0];
   if (!block) {
     throw new Error("Expected one parsed block.");
   }

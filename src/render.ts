@@ -6,7 +6,7 @@ import {
 
 import type { ParsedBlock } from "./parser";
 import { displayNameForType } from "./block-name";
-import { PROOF_TYPE, type Typography } from "./settings-model";
+import { quoteFontFamily, type Typography } from "./settings-model";
 
 function applyTypography(
   element: HTMLElement,
@@ -19,7 +19,7 @@ function applyTypography(
     typography.style === "bold-italic";
   element.style.setProperty(
     `--math-block-${section}-family`,
-    typography.family,
+    quoteFontFamily(typography.family),
   );
   element.style.setProperty(
     `--math-block-${section}-style`,
@@ -69,11 +69,5 @@ export async function renderBlock(
   renders.push(
     MarkdownRenderer.render(app, block.body, body, sourcePath, component),
   );
-
-  if (block.type === PROOF_TYPE) {
-    const tombstone = blockElement.createSpan({ cls: "math-block-tombstone" });
-    tombstone.setAttribute("aria-label", "End of proof");
-    tombstone.textContent = "∎";
-  }
   await Promise.all(renders);
 }

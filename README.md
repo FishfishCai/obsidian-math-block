@@ -25,28 +25,23 @@ Navigation, embeds, backlinks, file-rename updates, and modifier-key behavior ar
 
 ## Settings
 
-### Blocks
+### Block types
 
-Each row defines a block name, its title and body typography, and whether it uses the shared counter. Font-family fields accept CSS `font-family` values directly; the default is `"Times New Roman", serif`. Use the **B** and **I** controls for bold and italic.
+Each row defines a block name, its title and body typography, and whether it uses the shared counter. Each font field is a searchable dropdown of installed fonts, and you can also type a font name. The default is Times New Roman. Use the **B** and **I** controls for bold and italic.
 
-Proof is a fixed, unnumbered row. Every other row can be edited, removed, or added.
+Every row can be edited, removed, or added.
 
-| Name | Title | Body | Numbered |
+| Name | Title | Body | Number |
 | --- | --- | --- | --- |
-| proof | Times New Roman · I | Times New Roman | — |
 | definition | Times New Roman · B | Times New Roman | Yes |
 | theorem | Times New Roman · B | Times New Roman · I | Yes |
 | proposition | Times New Roman · B | Times New Roman · I | Yes |
 | lemma | Times New Roman · B | Times New Roman · I | Yes |
 | corollary | Times New Roman · B | Times New Roman · I | Yes |
-| example | Times New Roman · B | Times New Roman | Yes |
+| example | Times New Roman · B | Times New Roman | No |
 | note | Times New Roman · B | Times New Roman | No |
 
 ## Default block types
-
-::: proof
-abc.
-::: ^proof
 
 ::: definition:A
 abc.

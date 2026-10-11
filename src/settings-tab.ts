@@ -7,10 +7,11 @@ import {
   type SettingDefinitionItem,
 } from "obsidian";
 
+import { FontSuggest } from "./font-suggest";
 import {
   BLOCK_TYPE_PATTERN,
   DEFAULT_FONT_FAMILY,
-  PROOF_TYPE,
+  quoteFontFamily,
   uniqueCustomType,
   type BlockDefinition,
   type MathBlockSettings,
@@ -34,11 +35,10 @@ export class MathBlockSettingTab extends PluginSettingTab {
     return [
       {
         type: "group",
-        heading: "Blocks",
         items: [
           {
             name: "Block type table",
-            desc: "Enter any CSS font-family. Proof is fixed. Numbered rows share one counter.",
+            desc: "Pick an installed font or type its name. Numbered rows share one counter.",
             aliases: ["font", "typography", "numbering", "custom block"],
             render: (setting) => {
               setting.settingEl.empty();
@@ -62,16 +62,13 @@ export class MathBlockSettingTab extends PluginSettingTab {
       });
     }
     const header = table.createEl("thead").createEl("tr");
-    for (const name of ["Name", "Title", "Body", "Automatic numbering"]) {
+    for (const name of ["Name", "Title", "Body", "Number"]) {
       header.createEl("th", { text: name });
     }
 
-    const proofBody = table.createEl("tbody", {
-      cls: "math-block-settings-proof-group",
-    });
-    const regularBody = table.createEl("tbody");
+    const tableBody = table.createEl("tbody");
     for (const block of this.settingsPlugin.config.blocks) {
-      this.renderBlockRow(block.type === PROOF_TYPE ? proofBody : regularBody, block);
+      this.renderBlockRow(tableBody, block);
     }
 
     const addContainer = container.createDiv({ cls: "math-block-settings-add" });
@@ -100,14 +97,6 @@ export class MathBlockSettingTab extends PluginSettingTab {
     const numberedCell = row.createEl("td", {
       cls: "math-block-settings-numbered",
     });
-    if (block.type === PROOF_TYPE) {
-      numberedCell.createSpan({
-        cls: "math-block-settings-not-applicable",
-        text: "—",
-        attr: { "aria-label": "Not applicable" },
-      });
-      return;
-    }
     const numbered = numberedCell.createEl("input", { type: "checkbox" });
     numbered.checked = block.numbered;
     numbered.addEventListener("change", () => {
@@ -122,10 +111,6 @@ export class MathBlockSettingTab extends PluginSettingTab {
   ): void {
     const cell = row.createEl("td");
     const wrapper = cell.createDiv({ cls: "math-block-settings-name" });
-    if (block.type === PROOF_TYPE) {
-      wrapper.createSpan({ text: block.type });
-      return;
-    }
     const input = wrapper.createEl("input", {
       type: "text",
       value: block.type,
@@ -169,7 +154,10 @@ export class MathBlockSettingTab extends PluginSettingTab {
   ): void {
     const cell = row.createEl("td");
     const wrapper = cell.createDiv({ cls: "math-block-settings-typography" });
-    const family = wrapper.createEl("input", {
+    const familyField = wrapper.createDiv({
+      cls: "math-block-settings-family",
+    });
+    const family = familyField.createEl("input", {
       type: "text",
       value: typography.family,
       attr: {
@@ -178,16 +166,48 @@ export class MathBlockSettingTab extends PluginSettingTab {
         spellcheck: "false",
       },
     });
-    family.addEventListener("change", () => {
-      const value = family.value.trim();
-      if (!value) {
-        family.value = typography.family;
-        return;
+    const familyToggle = familyField.createEl("button", {
+      cls: "clickable-icon math-block-settings-family-toggle",
+      attr: { type: "button", tabindex: "-1", "aria-label": "Show fonts" },
+    });
+    setIcon(familyToggle, "chevron-down");
+    // Keep focus in the input so the font list stays attached to it.
+    familyToggle.addEventListener("mousedown", (event) => event.preventDefault());
+    familyToggle.addEventListener("click", () => {
+      if (family.ownerDocument.activeElement === family) {
+        family.blur();
+      } else {
+        family.focus();
       }
+    });
+    const previewFamily = (): void => {
+      family.style.setProperty(
+        "font-family",
+        quoteFontFamily(typography.family),
+      );
+    };
+    const chooseFamily = (value: string): void => {
+      family.setCustomValidity("");
       typography.family = value;
       family.value = value;
+      previewFamily();
       void this.settingsPlugin.saveSettings(false);
+    };
+    family.addEventListener("focus", () => family.select());
+    family.addEventListener("change", () => {
+      const value = family.value.trim();
+      family.setCustomValidity(value ? "" : "Enter a font name.");
+      if (family.reportValidity()) {
+        chooseFamily(value);
+      }
     });
+    new FontSuggest(
+      this.settingsPlugin,
+      family,
+      () => typography.family,
+      chooseFamily,
+    );
+    previewFamily();
 
     const styleControls = wrapper.createDiv({
       cls: "math-block-settings-style-controls",

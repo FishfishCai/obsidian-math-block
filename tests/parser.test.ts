@@ -3,8 +3,12 @@ import { describe, expect, it } from "vitest";
 import { parseBlocks } from "../src/parser";
 import { DEFAULT_BLOCK_DEFINITIONS } from "../src/settings-model";
 
+function parse(markdown: string) {
+  return parseBlocks(markdown, DEFAULT_BLOCK_DEFINITIONS);
+}
+
 function firstBlock(markdown: string) {
-  const block = parseBlocks(markdown)[0];
+  const block = parse(markdown)[0];
   if (!block) {
     throw new Error("Expected one parsed block.");
   }
@@ -13,7 +17,7 @@ function firstBlock(markdown: string) {
 
 describe("parseBlocks", () => {
   it("keeps unfinished blocks as source", () => {
-    expect(parseBlocks("::: theorem\n".repeat(1_000))).toEqual([]);
+    expect(parse("::: theorem\n".repeat(1_000))).toEqual([]);
   });
 
   it("uses one shared counter for the six numbered types", () => {
@@ -31,7 +35,7 @@ describe("parseBlocks", () => {
       ":::",
     ].join("\n");
 
-    const blocks = parseBlocks(markdown);
+    const blocks = parse(markdown);
     expect(blocks.map((block) => block.number)).toEqual([1, null, 2]);
     expect(blocks.map((block) => block.label)).toEqual([
       "Vector space",
@@ -53,7 +57,7 @@ describe("parseBlocks", () => {
       ":::",
     ].join("\n");
 
-    const blocks = parseBlocks(markdown);
+    const blocks = parse(markdown);
     expect(blocks).toHaveLength(1);
     expect(blocks[0]?.label).toBe("Actual");
   });
@@ -74,7 +78,7 @@ describe("parseBlocks", () => {
   });
 
   it("keeps an indented closing fence inside its code block", () => {
-    expect(parseBlocks([
+    expect(parse([
       "```",
       "    ```",
       "::: theorem",
@@ -85,7 +89,7 @@ describe("parseBlocks", () => {
   });
 
   it("accepts a block after inline backticks on their own line", () => {
-    expect(parseBlocks([
+    expect(parse([
       "``` abc ```",
       "::: theorem",
       "abc",
@@ -108,7 +112,7 @@ describe("parseBlocks", () => {
       "::::",
     ].join("\n")).join("\n");
 
-    expect(parseBlocks(markdown).map((block) => block.type)).toEqual(
+    expect(parse(markdown).map((block) => block.type)).toEqual(
       DEFAULT_BLOCK_DEFINITIONS.map((definition) => definition.type),
     );
   });
@@ -164,7 +168,7 @@ describe("parseBlocks", () => {
   });
 
   it("requires a closing ID in Obsidian's block ID syntax", () => {
-    expect(parseBlocks([
+    expect(parse([
       "::: theorem:Invalid ID",
       "body",
       "::: ^not_valid",

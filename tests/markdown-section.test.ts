@@ -3,9 +3,59 @@ import { describe, expect, it } from "vitest";
 import {
   blockAwareLineRange,
   markdownForLineRange,
+  offsetOfLine,
   previewBlockForSection,
+  savedLineOffset,
 } from "../src/markdown-section";
 import { parseBlocks } from "../src/parser";
+import { DEFAULT_BLOCK_DEFINITIONS } from "../src/settings-model";
+
+function parse(markdown: string) {
+  return parseBlocks(markdown, DEFAULT_BLOCK_DEFINITIONS);
+}
+
+describe("savedLineOffset", () => {
+  const markdown = [
+    "# Basics",
+    "",
+    "::: definition:Rank",
+    "body",
+    ":::",
+    "",
+    "# Eigen",
+    "",
+    "::: lemma",
+    "body",
+    ":::",
+    "",
+  ].join("\n");
+
+  it("places the whole note at line zero", () => {
+    expect(savedLineOffset(markdown, markdown)).toBe(0);
+  });
+
+  it("finds the source line of an embedded section", () => {
+    const section = ["# Eigen", "", "::: lemma", "body", ":::", ""].join("\n");
+    expect(savedLineOffset(section, markdown)).toBe(6);
+  });
+
+  it("returns null for text missing from the saved note", () => {
+    expect(savedLineOffset("::: theorem\nother\n:::", markdown)).toBeNull();
+  });
+
+  it("rejects text found more than once", () => {
+    expect(() => savedLineOffset("body\n:::", markdown)).toThrow();
+  });
+});
+
+describe("offsetOfLine", () => {
+  it("returns the character offset where a line starts", () => {
+    const markdown = "ab\ncde\n\nf";
+    expect(offsetOfLine(markdown, 0)).toBe(0);
+    expect(offsetOfLine(markdown, 1)).toBe(3);
+    expect(offsetOfLine(markdown, 3)).toBe(8);
+  });
+});
 
 describe("markdownForLineRange", () => {
   it("extracts the inclusive Obsidian section range from full-file text", () => {
@@ -47,7 +97,7 @@ describe("blockAwareLineRange", () => {
     "body",
     ":::",
   ].join("\n");
-  const blocks = parseBlocks(markdown);
+  const blocks = parse(markdown);
 
   it("extends a section through a block split by display math", () => {
     expect(blockAwareLineRange(0, 5, blocks)).toEqual({
@@ -74,7 +124,7 @@ describe("blockAwareLineRange", () => {
   });
 
   it("keeps the text that follows a continued block's closing line", () => {
-    const tail = parseBlocks([
+    const tail = parse([
       "::: theorem",
       "$$",
       "x",
@@ -104,7 +154,7 @@ describe("previewBlockForSection", () => {
     "other",
     "::: ^other",
   ].join("\n");
-  const blocks = parseBlocks(markdown);
+  const blocks = parse(markdown);
 
   it("restores the whole block from a preview of its closing line", () => {
     expect(previewBlockForSection(
