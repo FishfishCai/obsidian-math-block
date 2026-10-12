@@ -29,12 +29,13 @@ export interface BlockAwareLineRange {
   fullyCovered: boolean;
 }
 
-// Section embeds render a slice of the saved note, and their lines count from it.
-export function savedLineOffset(text: string, markdown: string): number {
+// Section embeds render a slice of the saved note, and their lines count from
+// it. A null offset marks text of its own, such as a view with unsaved edits.
+export function savedLineOffset(text: string, markdown: string): number | null {
   const fragment = text.trimEnd();
   const index = markdown.indexOf(fragment);
   if (index < 0) {
-    throw new Error("The rendered text is missing from the saved note.");
+    return null;
   }
   if (markdown.indexOf(fragment, index + 1) >= 0) {
     throw new Error("The rendered text matches more than one place in the note.");

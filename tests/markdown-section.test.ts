@@ -38,8 +38,8 @@ describe("savedLineOffset", () => {
     expect(savedLineOffset(section, markdown)).toBe(6);
   });
 
-  it("rejects text missing from the saved note", () => {
-    expect(() => savedLineOffset("::: theorem\nother\n:::", markdown)).toThrow();
+  it("returns null for text missing from the saved note", () => {
+    expect(savedLineOffset("::: theorem\nother\n:::", markdown)).toBeNull();
   });
 
   it("rejects text found more than once", () => {

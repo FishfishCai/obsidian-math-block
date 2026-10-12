@@ -47,47 +47,45 @@ function withDocument(
   return range && { ...range, document };
 }
 
-// A note's own view and a canvas card render their own text, which may hold
-// unsaved edits. Embeds and hover previews of a note render a slice of the
-// saved note, so their blocks keep the note's numbering.
+// Obsidian post-processes a section before attaching it, so the rendered text
+// tells the cases apart. A block link previews the tail of a block, embeds and
+// hover previews render the saved note or a slice of it, and any other text is
+// its own document: a view with unsaved edits or a canvas card.
 async function sectionRange(
   plugin: Plugin,
   index: BlockIndex,
-  element: HTMLElement,
   sourcePath: string,
   section: MarkdownSectionInformation,
 ): Promise<DocumentRange | null> {
   const file = plugin.app.vault.getAbstractFileByPath(sourcePath);
-  if (
-    element.closest(".markdown-embed") === null ||
-    !(file instanceof TFile) ||
-    file.extension !== "md"
-  ) {
-    const document = index.parseText(section.text);
-    return withDocument(
-      blockAwareLineRange(section.lineStart, section.lineEnd, document.blocks),
-      document,
-    );
+  if (file instanceof TFile && file.extension === "md") {
+    const note = await index.getDocument(file);
+    const target = previewBlockForSection(section.text, note.blocks);
+    if (target) {
+      return {
+        document: note,
+        lineStart: target.fromLine,
+        lineEnd: target.toLine,
+        fullyCovered: false,
+      };
+    }
+    const line = index.sliceLine(section.text, note);
+    if (line !== null) {
+      return withDocument(
+        blockAwareLineRange(
+          section.lineStart + line,
+          section.lineEnd + line,
+          note.blocks,
+        ),
+        note,
+      );
+    }
   }
 
-  const note = await index.getDocument(file);
-  const target = previewBlockForSection(section.text, note.blocks);
-  if (target) {
-    return {
-      document: note,
-      lineStart: target.fromLine,
-      lineEnd: target.toLine,
-      fullyCovered: false,
-    };
-  }
-  const line = index.sliceLine(section.text, note);
+  const document = index.parseText(section.text);
   return withDocument(
-    blockAwareLineRange(
-      section.lineStart + line,
-      section.lineEnd + line,
-      note.blocks,
-    ),
-    note,
+    blockAwareLineRange(section.lineStart, section.lineEnd, document.blocks),
+    document,
   );
 }
 
@@ -114,7 +112,6 @@ export async function processReadingModeBlocks(
   const range = await sectionRange(
     plugin,
     index,
-    element,
     context.sourcePath,
     section,
   );

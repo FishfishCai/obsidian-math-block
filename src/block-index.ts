@@ -38,7 +38,7 @@ interface CacheEntry {
 interface LocatedSlice {
   text: string;
   note: IndexedDocument;
-  line: number;
+  line: number | null;
 }
 
 export class BlockIndex {
@@ -107,8 +107,8 @@ export class BlockIndex {
     return this.lastText;
   }
 
-  // Every section of an embed carries the same text, so locate it once.
-  sliceLine(text: string, note: IndexedDocument): number {
+  // Every section of a view carries the same text, so locate it once.
+  sliceLine(text: string, note: IndexedDocument): number | null {
     if (this.lastSlice?.text !== text || this.lastSlice.note !== note) {
       this.lastSlice = {
         text,

@@ -161,7 +161,7 @@ describe("block index", () => {
     const calls = indexOf.mock.calls.length;
     expect(index.sliceLine(section, note)).toBe(2);
     expect(indexOf.mock.calls.length).toBe(calls);
-    expect(() => index.sliceLine("::: lemma\nxyz\n:::", note)).toThrow();
+    expect(index.sliceLine("::: lemma\nxyz\n:::", note)).toBeNull();
   });
 });
 
@@ -193,16 +193,13 @@ describe("Reading view", () => {
     "::: ^b",
   ].join("\n");
 
-  function render(
-    section: { text: string; lineStart: number; lineEnd: number },
-    embedded: boolean,
-  ) {
+  function render(section: { text: string; lineStart: number; lineEnd: number }) {
     const created: string[] = [];
+    // Obsidian post-processes a section before attaching it to the view.
     const element = {
       textContent: "source",
       classList: { contains: () => false, add: vi.fn() },
-      closest: (selector: string) =>
-        embedded && selector === ".markdown-embed" ? {} : null,
+      closest: () => null,
       querySelector: () => null,
       createDiv: ({ cls }: { cls: string }) => {
         created.push(cls);
@@ -244,14 +241,14 @@ describe("Reading view", () => {
 
   it("renders the note's own text with its unsaved edits", async () => {
     const text = `::: lemma\nnew\n:::\n\n${saved}`;
-    const { done, element } = render({ text, lineStart: 4, lineEnd: 6 }, false);
+    const { done, element } = render({ text, lineStart: 4, lineEnd: 6 });
     await done;
     expect(element.textContent).toBe("");
     expect(renderedBlocks()).toEqual(["definition 2"]);
   });
 
   it("restores a split block from its tail in a hover preview", async () => {
-    const { done } = render({ text: "after\n::: ^b", lineStart: 0, lineEnd: 1 }, true);
+    const { done } = render({ text: "after\n::: ^b", lineStart: 0, lineEnd: 1 });
     await done;
     expect(renderedBlocks()).toEqual(["theorem 2"]);
     expect(renderedMarkdown()).toEqual([]);
@@ -259,31 +256,31 @@ describe("Reading view", () => {
 
   it("numbers a heading embed from the saved note", async () => {
     const text = saved.slice(saved.indexOf("# B"));
-    const { done } = render({ text, lineStart: 2, lineEnd: 3 }, true);
+    const { done } = render({ text, lineStart: 2, lineEnd: 3 });
     await done;
     expect(renderedBlocks()).toEqual(["theorem 2"]);
   });
 
   it("keeps the text that follows a block in the same section", async () => {
     const text = "::: note\nabc\n:::\nafter";
-    const { done } = render({ text, lineStart: 0, lineEnd: 3 }, false);
+    const { done } = render({ text, lineStart: 0, lineEnd: 3 });
     await done;
     expect(renderedBlocks()).toEqual(["note null"]);
     expect(renderedMarkdown()).toEqual(["\nafter"]);
   });
 
   it("empties a section that an earlier block covers", async () => {
-    const { done, element, created } = render({ text: saved, lineStart: 8, lineEnd: 10 }, false);
+    const { done, element, created } = render({ text: saved, lineStart: 8, lineEnd: 10 });
     await done;
     expect(element.textContent).toBe("");
     expect(created).toEqual([]);
     expect(renderBlock).not.toHaveBeenCalled();
   });
 
-  it("rejects an embed whose text is missing from the saved note", async () => {
-    const text = "::: lemma\nxyz\n:::";
-    const { done } = render({ text, lineStart: 0, lineEnd: 2 }, true);
-    await expect(done).rejects.toThrow();
+  it("numbers text missing from the saved note on its own", async () => {
+    const { done } = render({ text: "::: lemma\nxyz\n:::", lineStart: 0, lineEnd: 2 });
+    await done;
+    expect(renderedBlocks()).toEqual(["lemma 1"]);
   });
 });
 
