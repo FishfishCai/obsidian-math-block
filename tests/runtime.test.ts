@@ -10,14 +10,17 @@ import {
   type Editor,
   type EditorPosition,
   type EditorTransaction,
+  type MarkdownPostProcessorContext,
   type Plugin,
 } from "obsidian";
 
-import { BlockIndex } from "../src/block-index";
+import { BlockIndex, IndexedDocument } from "../src/block-index";
 import { createBlockEditorExtension } from "../src/editor-extension";
 import { parseBlocks } from "../src/parser";
 import * as parser from "../src/parser";
+import { processReadingModeBlocks } from "../src/reading-mode";
 import { ReferenceSuggest } from "../src/reference-suggest";
+import { renderBlock } from "../src/render";
 import { DEFAULT_BLOCK_DEFINITIONS } from "../src/settings-model";
 
 function parse(markdown: string) {
@@ -25,6 +28,7 @@ function parse(markdown: string) {
 }
 
 const editorContext = vi.hoisted(() => ({ path: "A.md", live: true }));
+const renderMarkdown = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock("obsidian", async () => {
   const { StateField } = await import("@codemirror/state");
@@ -32,6 +36,7 @@ vi.mock("obsidian", async () => {
     TFile: class {},
     Notice: vi.fn(),
     MarkdownRenderChild: class {},
+    MarkdownRenderer: { render: renderMarkdown },
     editorInfoField: StateField.define({
       create: () => ({ file: { path: editorContext.path } }),
       update: () => ({ file: { path: editorContext.path } }),
@@ -139,12 +144,146 @@ describe("block index", () => {
     const index = new BlockIndex({} as App, () => DEFAULT_BLOCK_DEFINITIONS);
     const text = "::: theorem\nabc\n:::";
     const first = index.parseText(text);
-    expect(first.map((block) => block.number)).toEqual([1]);
+    expect(first.blocks.map((block) => block.number)).toEqual([1]);
     expect(index.parseText(text)).toBe(first);
     expect(index.parseText(`${text}\n`)).not.toBe(first);
     const current = index.parseText(text);
     index.clear();
     expect(index.parseText(text)).not.toBe(current);
+  });
+
+  it("locates an embed's text once for all its sections", () => {
+    const index = new BlockIndex({} as App, () => DEFAULT_BLOCK_DEFINITIONS);
+    const note = index.parseText("# A\n\n::: theorem\nabc\n:::\n");
+    const indexOf = vi.spyOn(String.prototype, "indexOf");
+    const section = "::: theorem\nabc\n:::";
+    expect(index.sliceLine(section, note)).toBe(2);
+    const calls = indexOf.mock.calls.length;
+    expect(index.sliceLine(section, note)).toBe(2);
+    expect(indexOf.mock.calls.length).toBe(calls);
+    expect(() => index.sliceLine("::: lemma\nxyz\n:::", note)).toThrow();
+  });
+});
+
+describe("indexed document", () => {
+  it("slices whole lines and keeps CRLF content", () => {
+    const markdown = "# A\r\n\r\n::: theorem\r\nabc\r\n:::";
+    const document = new IndexedDocument(markdown, parse(markdown));
+    const { from, to } = document.lineRange(2, 3);
+    expect(markdown.slice(from, to)).toBe("::: theorem\r\nabc\r");
+    const tail = document.lineRange(4, 4);
+    expect(markdown.slice(tail.from, tail.to)).toBe(":::");
+  });
+});
+
+describe("Reading view", () => {
+  const saved = [
+    "::: definition:A",
+    "abc",
+    ":::",
+    "",
+    "# B",
+    "",
+    "::: theorem:B",
+    "before",
+    "$$",
+    "x",
+    "$$",
+    "after",
+    "::: ^b",
+  ].join("\n");
+
+  function render(
+    section: { text: string; lineStart: number; lineEnd: number },
+    embedded: boolean,
+  ) {
+    const created: string[] = [];
+    const element = {
+      textContent: "source",
+      classList: { contains: () => false, add: vi.fn() },
+      closest: (selector: string) =>
+        embedded && selector === ".markdown-embed" ? {} : null,
+      querySelector: () => null,
+      createDiv: ({ cls }: { cls: string }) => {
+        created.push(cls);
+        return { cls };
+      },
+    };
+    const plugin = {
+      app: {
+        vault: {
+          getAbstractFileByPath: () => file("A.md"),
+          cachedRead: vi.fn(async () => saved),
+        },
+      },
+    } as unknown as Plugin;
+    const context = {
+      sourcePath: "A.md",
+      getSectionInfo: () => section,
+      addChild: vi.fn(),
+    } as unknown as MarkdownPostProcessorContext;
+    const index = new BlockIndex(plugin.app, () => DEFAULT_BLOCK_DEFINITIONS);
+    const done = processReadingModeBlocks(
+      plugin,
+      index,
+      element as unknown as HTMLElement,
+      context,
+    );
+    return { done, element, created };
+  }
+
+  function renderedBlocks() {
+    return vi.mocked(renderBlock).mock.calls.map(
+      ([, block]) => `${block.type} ${block.number}`,
+    );
+  }
+
+  function renderedMarkdown() {
+    return renderMarkdown.mock.calls.map((call: unknown[]) => call[1]);
+  }
+
+  it("renders the note's own text with its unsaved edits", async () => {
+    const text = `::: lemma\nnew\n:::\n\n${saved}`;
+    const { done, element } = render({ text, lineStart: 4, lineEnd: 6 }, false);
+    await done;
+    expect(element.textContent).toBe("");
+    expect(renderedBlocks()).toEqual(["definition 2"]);
+  });
+
+  it("restores a split block from its tail in a hover preview", async () => {
+    const { done } = render({ text: "after\n::: ^b", lineStart: 0, lineEnd: 1 }, true);
+    await done;
+    expect(renderedBlocks()).toEqual(["theorem 2"]);
+    expect(renderedMarkdown()).toEqual([]);
+  });
+
+  it("numbers a heading embed from the saved note", async () => {
+    const text = saved.slice(saved.indexOf("# B"));
+    const { done } = render({ text, lineStart: 2, lineEnd: 3 }, true);
+    await done;
+    expect(renderedBlocks()).toEqual(["theorem 2"]);
+  });
+
+  it("keeps the text that follows a block in the same section", async () => {
+    const text = "::: note\nabc\n:::\nafter";
+    const { done } = render({ text, lineStart: 0, lineEnd: 3 }, false);
+    await done;
+    expect(renderedBlocks()).toEqual(["note null"]);
+    expect(renderedMarkdown()).toEqual(["\nafter"]);
+  });
+
+  it("empties a section that an earlier block covers", async () => {
+    const { done, element, created } = render({ text: saved, lineStart: 8, lineEnd: 10 }, false);
+    await done;
+    expect(element.textContent).toBe("");
+    expect(created).toEqual([]);
+    expect(renderBlock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an embed whose text is missing from the saved note", async () => {
+    const text = "::: lemma\nxyz\n:::";
+    const { done } = render({ text, lineStart: 0, lineEnd: 2 }, true);
+    await expect(done).rejects.toThrow();
   });
 });
 

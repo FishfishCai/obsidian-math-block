@@ -2,36 +2,39 @@ import type { ParsedBlock } from "./parser";
 
 const closingIdPattern = /^ {0,3}:{3,}\s+\^([A-Za-z0-9-]+)\s*$/u;
 
+// A block link renders only the Markdown section that holds the block ID.
+// Display math splits a block, so that section is the tail after the last
+// split. A preview of the whole block renders through the section path.
 export function previewBlockForSection(
   markdown: string,
-  lineStart: number,
-  lineEnd: number,
   blocks: readonly ParsedBlock[],
 ): ParsedBlock | null {
-  const sectionId = markdown.trim().match(closingIdPattern)?.[1];
-  if (sectionId) {
-    return blocks.find((block) => block.id === sectionId) ?? null;
-  }
-  if (lineStart !== lineEnd) {
+  const text = markdown.trim();
+  const lastLine = text.slice(text.lastIndexOf("\n") + 1);
+  const sectionId = lastLine.match(closingIdPattern)?.[1];
+  const block = sectionId
+    ? blocks.find((candidate) => candidate.id === sectionId)
+    : undefined;
+  const raw = block?.raw.trimEnd();
+  if (!block || !raw?.endsWith(text)) {
     return null;
   }
-  return blocks.find(
-    (block) => block.id !== null && block.toLine === lineStart,
-  ) ?? null;
+  const head = raw.slice(0, raw.length - text.length);
+  return /\n[ \t]*$/u.test(head) ? block : null;
 }
 
-interface BlockAwareLineRange {
+export interface BlockAwareLineRange {
   lineStart: number;
   lineEnd: number;
   fullyCovered: boolean;
 }
 
 // Section embeds render a slice of the saved note, and their lines count from it.
-export function savedLineOffset(text: string, markdown: string): number | null {
+export function savedLineOffset(text: string, markdown: string): number {
   const fragment = text.trimEnd();
   const index = markdown.indexOf(fragment);
   if (index < 0) {
-    return null;
+    throw new Error("The rendered text is missing from the saved note.");
   }
   if (markdown.indexOf(fragment, index + 1) >= 0) {
     throw new Error("The rendered text matches more than one place in the note.");
@@ -39,20 +42,16 @@ export function savedLineOffset(text: string, markdown: string): number | null {
   return markdown.slice(0, index).split("\n").length - 1;
 }
 
-export function offsetOfLine(markdown: string, line: number): number {
-  let offset = 0;
-  for (let index = 0; index < line; index += 1) {
-    offset = markdown.indexOf("\n", offset) + 1;
+export function lineStarts(markdown: string): number[] {
+  const starts = [0];
+  for (
+    let index = markdown.indexOf("\n");
+    index >= 0;
+    index = markdown.indexOf("\n", index + 1)
+  ) {
+    starts.push(index + 1);
   }
-  return offset;
-}
-
-export function markdownForLineRange(
-  markdown: string,
-  lineStart: number,
-  lineEnd: number,
-): string {
-  return markdown.split("\n").slice(lineStart, lineEnd + 1).join("\n");
+  return starts;
 }
 
 // A null range marks a section of ordinary Markdown.

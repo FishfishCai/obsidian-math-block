@@ -4,15 +4,30 @@ import {
   type Plugin,
 } from "obsidian";
 
+import { lineStarts, savedLineOffset } from "./markdown-section";
 import {
   parseBlocks,
   type ParsedBlock,
 } from "./parser";
 import type { BlockDefinition } from "./settings-model";
 
-interface IndexedDocument {
-  markdown: string;
-  blocks: ParsedBlock[];
+export class IndexedDocument {
+  private starts: number[] | null = null;
+
+  constructor(
+    readonly markdown: string,
+    readonly blocks: ParsedBlock[],
+  ) {}
+
+  // Reading view slices notes by line, so the line table waits for it.
+  lineRange(lineStart: number, lineEnd: number): { from: number; to: number } {
+    this.starts ??= lineStarts(this.markdown);
+    const next = this.starts[lineEnd + 1];
+    return {
+      from: this.starts[lineStart]!,
+      to: next === undefined ? this.markdown.length : next - 1,
+    };
+  }
 }
 
 interface CacheEntry {
@@ -20,9 +35,16 @@ interface CacheEntry {
   document: Promise<IndexedDocument>;
 }
 
+interface LocatedSlice {
+  text: string;
+  note: IndexedDocument;
+  line: number;
+}
+
 export class BlockIndex {
   private readonly cache = new Map<string, CacheEntry>();
   private lastText: IndexedDocument | null = null;
+  private lastSlice: LocatedSlice | null = null;
 
   constructor(
     private readonly app: App,
@@ -58,10 +80,9 @@ export class BlockIndex {
     }
 
     const path = file.path;
-    const document = this.app.vault.cachedRead(file).then((markdown) => ({
-      markdown,
-      blocks: parseBlocks(markdown, this.getDefinitions()),
-    }));
+    const document = this.app.vault.cachedRead(file).then((markdown) =>
+      new IndexedDocument(markdown, parseBlocks(markdown, this.getDefinitions()))
+    );
     const entry: CacheEntry = {
       modifiedTime: file.stat.mtime,
       document,
@@ -76,18 +97,31 @@ export class BlockIndex {
   }
 
   // Reading views render many sections from the same unsaved text.
-  parseText(markdown: string): ParsedBlock[] {
+  parseText(markdown: string): IndexedDocument {
     if (this.lastText?.markdown !== markdown) {
-      this.lastText = {
+      this.lastText = new IndexedDocument(
         markdown,
-        blocks: parseBlocks(markdown, this.getDefinitions()),
+        parseBlocks(markdown, this.getDefinitions()),
+      );
+    }
+    return this.lastText;
+  }
+
+  // Every section of an embed carries the same text, so locate it once.
+  sliceLine(text: string, note: IndexedDocument): number {
+    if (this.lastSlice?.text !== text || this.lastSlice.note !== note) {
+      this.lastSlice = {
+        text,
+        note,
+        line: savedLineOffset(text, note.markdown),
       };
     }
-    return this.lastText.blocks;
+    return this.lastSlice.line;
   }
 
   clear(): void {
     this.cache.clear();
     this.lastText = null;
+    this.lastSlice = null;
   }
 }

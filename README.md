@@ -29,7 +29,7 @@ Navigation, embeds, backlinks, file-rename updates, and modifier-key behavior ar
 
 Each row defines a block name, its title and body typography, and whether it uses the shared counter. Each font field is a searchable dropdown of installed fonts, and you can also type a font name. The default is Times New Roman. Use the **B** and **I** controls for bold and italic.
 
-Every row can be edited, removed, or added.
+Use **Add block type** to add a row and the trash icon to delete one.
 
 | Name | Title | Body | Number |
 | --- | --- | --- | --- |

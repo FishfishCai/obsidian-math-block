@@ -3,18 +3,21 @@ import {
   MarkdownRenderer,
   TFile,
   type MarkdownPostProcessorContext,
+  type MarkdownSectionInformation,
   type Plugin,
 } from "obsidian";
 
-import type { BlockIndex } from "./block-index";
+import type { BlockIndex, IndexedDocument } from "./block-index";
 import {
   blockAwareLineRange,
-  markdownForLineRange,
-  offsetOfLine,
   previewBlockForSection,
-  savedLineOffset,
+  type BlockAwareLineRange,
 } from "./markdown-section";
 import { renderBlock } from "./render";
+
+interface DocumentRange extends BlockAwareLineRange {
+  document: IndexedDocument;
+}
 
 async function renderPlainMarkdown(
   plugin: Plugin,
@@ -34,6 +37,57 @@ async function renderPlainMarkdown(
     plainContainer,
     sourcePath,
     component,
+  );
+}
+
+function withDocument(
+  range: BlockAwareLineRange | null,
+  document: IndexedDocument,
+): DocumentRange | null {
+  return range && { ...range, document };
+}
+
+// A note's own view and a canvas card render their own text, which may hold
+// unsaved edits. Embeds and hover previews of a note render a slice of the
+// saved note, so their blocks keep the note's numbering.
+async function sectionRange(
+  plugin: Plugin,
+  index: BlockIndex,
+  element: HTMLElement,
+  sourcePath: string,
+  section: MarkdownSectionInformation,
+): Promise<DocumentRange | null> {
+  const file = plugin.app.vault.getAbstractFileByPath(sourcePath);
+  if (
+    element.closest(".markdown-embed") === null ||
+    !(file instanceof TFile) ||
+    file.extension !== "md"
+  ) {
+    const document = index.parseText(section.text);
+    return withDocument(
+      blockAwareLineRange(section.lineStart, section.lineEnd, document.blocks),
+      document,
+    );
+  }
+
+  const note = await index.getDocument(file);
+  const target = previewBlockForSection(section.text, note.blocks);
+  if (target) {
+    return {
+      document: note,
+      lineStart: target.fromLine,
+      lineEnd: target.toLine,
+      fullyCovered: false,
+    };
+  }
+  const line = index.sliceLine(section.text, note);
+  return withDocument(
+    blockAwareLineRange(
+      section.lineStart + line,
+      section.lineEnd + line,
+      note.blocks,
+    ),
+    note,
   );
 }
 
@@ -57,69 +111,12 @@ export async function processReadingModeBlocks(
   if (!section) {
     return;
   }
-  const file = plugin.app.vault.getAbstractFileByPath(context.sourcePath);
-  if (!(file instanceof TFile)) {
-    return;
-  }
-  const source = await index.getDocument(file);
-  const hoverPopover = element.closest<HTMLElement>(".hover-popover");
-  const exactPreview = hoverPopover !== null ||
-    element.closest(".internal-embed") !== null;
-  if (exactPreview) {
-    const targetBlock = previewBlockForSection(
-      section.text,
-      section.lineStart,
-      section.lineEnd,
-      source.blocks,
-    );
-    if (targetBlock) {
-      element.textContent = "";
-      element.classList.add("math-block-reading-section");
-      if (hoverPopover) {
-        const targetSection = element.closest<HTMLElement>(
-          ".markdown-preview-section",
-        ) ?? element;
-        targetSection.classList.add("math-block-hover-target");
-        hoverPopover.classList.add("math-block-hover-popover");
-      }
-      const renderChild = new MarkdownRenderChild(element);
-      context.addChild(renderChild);
-      const blockContainer = element.createDiv({
-        cls: "math-block-generated",
-      });
-      await renderBlock(
-        plugin.app,
-        targetBlock,
-        blockContainer,
-        context.sourcePath,
-        renderChild,
-      );
-      return;
-    }
-  }
-
-  // Section embeds render a slice of the saved note. The note's own view and
-  // whole-note embeds render its full text, which may hold unsaved edits.
-  let markdown = source.markdown;
-  let blocks = source.blocks;
-  let lineOffset = 0;
-  if (section.text.trimEnd() !== source.markdown.trimEnd()) {
-    const textBlocks = index.parseText(section.text);
-    if (textBlocks.length === 0) {
-      return;
-    }
-    const savedOffset = savedLineOffset(section.text, source.markdown);
-    if (savedOffset === null) {
-      markdown = section.text;
-      blocks = textBlocks;
-    } else {
-      lineOffset = savedOffset;
-    }
-  }
-  const range = blockAwareLineRange(
-    section.lineStart + lineOffset,
-    section.lineEnd + lineOffset,
-    blocks,
+  const range = await sectionRange(
+    plugin,
+    index,
+    element,
+    context.sourcePath,
+    section,
   );
   if (!range) {
     return;
@@ -130,45 +127,42 @@ export async function processReadingModeBlocks(
     return;
   }
 
-  const sectionFrom = offsetOfLine(markdown, range.lineStart);
-  const sectionMarkdown = markdownForLineRange(
-    markdown,
-    range.lineStart,
-    range.lineEnd,
-  );
+  const { document } = range;
+  const { from, to } = document.lineRange(range.lineStart, range.lineEnd);
   const renderChild = new MarkdownRenderChild(element);
   context.addChild(renderChild);
-  let cursor = 0;
-
-  for (const block of blocks) {
-    if (block.fromLine < range.lineStart || block.fromLine > range.lineEnd) {
+  // Each render creates its container before it awaits, keeping source order.
+  const renders: Promise<void>[] = [];
+  let cursor = from;
+  for (const block of document.blocks) {
+    if (block.fromLine > range.lineEnd) {
+      break;
+    }
+    if (block.fromLine < range.lineStart) {
       continue;
     }
-    await renderPlainMarkdown(
+    renders.push(renderPlainMarkdown(
       plugin,
-      sectionMarkdown.slice(cursor, block.from - sectionFrom),
+      document.markdown.slice(cursor, block.from),
       element,
       context.sourcePath,
       renderChild,
-    );
-    const blockContainer = element.createDiv({
-      cls: "math-block-generated",
-    });
-    await renderBlock(
+    ));
+    renders.push(renderBlock(
       plugin.app,
       block,
-      blockContainer,
+      element.createDiv({ cls: "math-block-generated" }),
       context.sourcePath,
       renderChild,
-    );
-    cursor = block.to - sectionFrom;
+    ));
+    cursor = block.to;
   }
-
-  await renderPlainMarkdown(
+  renders.push(renderPlainMarkdown(
     plugin,
-    sectionMarkdown.slice(cursor),
+    document.markdown.slice(cursor, to),
     element,
     context.sourcePath,
     renderChild,
-  );
+  ));
+  await Promise.all(renders);
 }

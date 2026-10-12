@@ -20,7 +20,7 @@ describe("parseBlocks", () => {
     expect(parse("::: theorem\n".repeat(1_000))).toEqual([]);
   });
 
-  it("uses one shared counter for the six numbered types", () => {
+  it("shares one counter across numbered types", () => {
     const markdown = [
       "::: definition:Vector space",
       "A definition.",

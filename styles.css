@@ -16,9 +16,6 @@
   font-family: var(--math-block-body-family);
   font-style: var(--math-block-body-style);
   font-weight: var(--math-block-body-weight);
-}
-
-.math-block-body {
   white-space: normal;
 }
 
@@ -51,10 +48,6 @@
 
 .math-block-editor-widget > .math-block-container {
   margin: 0;
-}
-
-.math-block-hover-popover .markdown-preview-section:not(.math-block-hover-target) {
-  display: none;
 }
 
 .math-block-settings-table {

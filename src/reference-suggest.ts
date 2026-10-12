@@ -167,15 +167,16 @@ export class ReferenceSuggest extends EditorSuggest<IndexedBlock> {
   }
 
   selectSuggestion(item: IndexedBlock, _event: MouseEvent | KeyboardEvent): void {
-    void this.insertReference(item);
+    if (!this.context) {
+      throw new Error("A reference was chosen outside an open suggestion.");
+    }
+    void this.insertReference(item, this.context);
   }
 
-  private async insertReference(item: IndexedBlock): Promise<void> {
-    const context = this.context;
-    if (!context) {
-      return;
-    }
-
+  private async insertReference(
+    item: IndexedBlock,
+    context: EditorSuggestContext,
+  ): Promise<void> {
     const source = context.editor.getValue();
     const local = item.file.path === context.file.path;
     const changes: EditorChange[] = [];
@@ -219,7 +220,7 @@ export class ReferenceSuggest extends EditorSuggest<IndexedBlock> {
       );
       context.editor.transaction({ changes });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create reference.";
+      const message = error instanceof Error ? error.message : String(error);
       new Notice(`${this.plugin.manifest.name}: ${message}`);
     }
   }
